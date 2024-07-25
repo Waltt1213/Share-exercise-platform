@@ -8,7 +8,6 @@ from tkinter.filedialog import askopenfilename
 from configs import data_base_path
 
 
-
 def register_user():
     def register():
         new_user_name = var_new_user_name.get()
@@ -189,7 +188,9 @@ def main_window(user):
             image = Image.open(file_path)
             text = pytesseract.image_to_string(image)
             edit_question(text)
+
     # 编辑问题
+
     def edit_question(text):
         correct_answers_list = []
         fill_blank_entries = []
@@ -285,7 +286,6 @@ def main_window(user):
             btn_add_blank.pack()
             btn_remove_blank.pack()
 
-
         tk.Label(edit_window, text="Edit Question Text").pack()
         text_box = tk.Text(edit_window, wrap='word', height=10)
         text_box.insert('1.0', text)
@@ -306,10 +306,10 @@ def main_window(user):
         def load_groups():
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT group_name FROM question_groups')
+            c.execute('SELECT question_group_name FROM user_inbox')
             groups = c.fetchall()
             conn.close()
-            group_menu['values'] = [group[0] for group in groups]
+            group_menu['values'] = [group for group in groups[0][0].split(',')]
 
         def add_new_group():
             new_group = tk.simpledialog.askstring("New Group", "Enter new group name:")
@@ -338,10 +338,10 @@ def main_window(user):
 
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT id FROM question_groups WHERE group_name = ?', (group_name, ))
+            c.execute('SELECT id FROM question_groups WHERE group_name = ?', (group_name,))
             group = c.fetchone()
             if not group:
-                c.execute('INSERT INTO question_groups (group_name) VALUES (?)', (group_name, ))
+                c.execute('INSERT INTO question_groups (group_name) VALUES (?)', (group_name,))
                 conn.commit()
                 group_id = c.lastrowid
             else:
@@ -350,6 +350,9 @@ def main_window(user):
                 INSERT INTO questions (question_text, question_type, options, correct_answer, group_id) 
                 VALUES (?, ?, ?, ?, ?)
                 ''', (question_text, question_type, options_text, correct_answers_text, group_id))
+            conn.commit()
+            c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
+                      (var_usr_name.get(), group_name))
             conn.commit()
             conn.close()
             messagebox.showinfo("Save", "Question and answer saved successfully!")
@@ -416,6 +419,7 @@ def main_window(user):
                       (user[0], question_id, 1))
         conn.commit()
         conn.close()
+
     # 做题
     def start_practice():
         def show_questions(group_id):
@@ -439,13 +443,18 @@ def main_window(user):
         practice_window.geometry("450x300")
         conn = sqlite3.connect(data_base_path)
         c = conn.cursor()
-        c.execute('SELECT id, group_name FROM question_groups')
-        groups = c.fetchall()
+        c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
+        question_groups = c.fetchall()
+
+        if question_groups:
+            for question_group in question_groups[0][0].split(','):
+                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group, ))
+                group_id = c.fetchone()[0]
+                tk.Button(practice_window, text=question_group, command=lambda gid=group_id: show_questions(gid)).pack()
+        else:
+            tk.Label(practice_window, text='There is no question groups open to you').pack()
         conn.close()
 
-        for group in groups:
-            group_id, group_name = group
-            tk.Button(practice_window, text=group_name, command=lambda gid=group_id: show_questions(gid)).pack()
     def create_user_group():
         def create():
             new_group_name = var_new_group_name.get()
@@ -501,7 +510,6 @@ def main_window(user):
             c = conn.cursor()
             c.execute('SELECT * FROM groups WHERE group_name = ?', (new_group_name,))
             group = c.fetchone()
-
             if group:
                 c.execute('SELECT * FROM groups WHERE group_name = ? AND users LIKE ?',
                           (new_group_name, f'%{user[1]}%'))
@@ -539,6 +547,7 @@ def main_window(user):
         join_button.place(x=100, y=40)
 
         # 退出登录
+
     def exit_log():
         main_win.destroy()
 
@@ -547,17 +556,51 @@ def main_window(user):
         def send_question():
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT users FROM groups WHERE group_name = ?', (user_group_name_var.get(),))
-            users = c.fetchall()
-            for user in users[0][0].split(','):
-                c.execute('SELECT user_name, question_group_name FROM user_inbox WHERE user_name = ? AND question_group_name = ?',
-                          (user, question_group_name_var.get()))
-                item = c.fetchone()
-                if not item:
-                    c.execute('INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)',
-                          (user, question_group_name_var.get()))
-                    conn.commit()
-                tk.messagebox.showinfo('Success', 'You have shared successfully')
+            if user_group_name_var.get() == 'All Users':
+                c.execute('SELECT username FROM users')
+                users = c.fetchall()
+                for user in users:
+                    c.execute('SELECT * FROM user_inbox WHERE user_name = ?', (user[0],))
+                    question_groups = c.fetchone()
+                    if question_groups:
+                        c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
+                                  (user[0], question_group_name_var.get()))
+                        question_group = c.fetchone()
+                        if not question_group:
+                            c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (user[0],))
+                            current_question_groups = c.fetchone()[0]
+                            updated_question_groups = f'{current_question_groups},{question_group_name_var.get()}' \
+                                if current_question_groups else question_group_name_var.get()
+                            c.execute('UPDATE user_inbox SET question_group_name = ? WHERE user_name = ?',
+                                      (updated_question_groups, user[0]))
+                            conn.commit()
+                    else:
+                        c.execute('INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)',
+                                  (user[0], question_group_name_var.get()))
+                        conn.commit()
+            else:
+                c.execute('SELECT users FROM groups WHERE group_name = ?', (user_group_name_var.get(),))
+                users = c.fetchall()
+                for user in users[0][0].split(','):
+                    c.execute('SELECT * FROM user_inbox WHERE user_name = ?', (user,))
+                    question_groups = c.fetchone()
+                    if question_groups:
+                        c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
+                                  (user, question_group_name_var.get()))
+                        question_group = c.fetchone()
+                        if not question_group:
+                            c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (user,))
+                            current_question_groups = c.fetchone()[0]
+                            updated_question_groups = f'{current_question_groups},{question_group_name_var.get()}' \
+                                if current_question_groups else question_group_name_var.get()
+                            c.execute('UPDATE user_inbox SET question_group_name = ? WHERE user_name = ?',
+                                      (updated_question_groups, user))
+                            conn.commit()
+                    else:
+                        c.execute('INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)',
+                                  (user, question_group_name_var.get()))
+                        conn.commit()
+            tk.messagebox.showinfo('Success', 'You have shared successfully')
             conn.close()
 
         share_window = tk.Toplevel(main_win)
@@ -567,7 +610,7 @@ def main_window(user):
         question_group_name_var = tk.StringVar()
         question_group_menu = ttk.Combobox(share_window, textvariable=question_group_name_var)
         question_group_menu.pack()
-        tk.Label(share_window, text='Select User Group:').pack()
+        tk.Label(share_window, text='Select Receiver:').pack()
         user_group_name_var = tk.StringVar()
         user_group_menu = ttk.Combobox(share_window, textvariable=user_group_name_var)
         user_group_menu.pack()
@@ -587,7 +630,7 @@ def main_window(user):
             user_groups = c.fetchall()
             conn.close()
             if user_groups:
-                user_group_menu['values'] = [group[0] for group in user_groups]
+                user_group_menu['values'] = [group[0] for group in user_groups] + ['All Users']
 
         load_question_group()
         load_user_group()
