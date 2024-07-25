@@ -5,8 +5,8 @@ import pytesseract
 from PIL import Image
 from tkinter import simpledialog
 from tkinter.filedialog import askopenfilename
+from configs import data_base_path
 
-from src.configs import data_base_path
 
 
 def register_user():
@@ -452,13 +452,13 @@ def main_window(user):
 
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT * FROM groups WHERE groupname = ?', (new_group_name,))
+            c.execute('SELECT * FROM groups WHERE group_name = ?', (new_group_name,))
             group = c.fetchone()
 
             if group:
                 tk.messagebox.showinfo('Error', 'This group has been created')
             else:
-                c.execute('INSERT INTO groups (groupname, users) VALUES (?, ?)',
+                c.execute('INSERT INTO groups (group_name, users) VALUES (?, ?)',
                           (new_group_name, user[1]))
                 tk.messagebox.showinfo('Success', 'You have create ' + new_group_name + ' successfully')
                 conn.commit()
@@ -479,13 +479,13 @@ def main_window(user):
         confirm_button = tk.Button(create_window, text='Confirm', command=create)
         confirm_button.place(x=100, y=40)
 
-    # 搜索和加入组 cyf
+    # 搜索和加入组
     def search_join_user_group():
         def search():
             new_group_name = var_new_group_name.get()
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT * FROM groups WHERE groupname = ?', (new_group_name,))
+            c.execute('SELECT * FROM groups WHERE group_name = ?', (new_group_name,))
             group = c.fetchone()
 
             if group:
@@ -499,21 +499,21 @@ def main_window(user):
             new_group_name = var_new_group_name.get()
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT * FROM groups WHERE groupname = ?', (new_group_name,))
+            c.execute('SELECT * FROM groups WHERE group_name = ?', (new_group_name,))
             group = c.fetchone()
 
             if group:
-                c.execute('SELECT * FROM groups WHERE groupname = ? AND users LIKE ?',
+                c.execute('SELECT * FROM groups WHERE group_name = ? AND users LIKE ?',
                           (new_group_name, f'%{user[1]}%'))
                 member = c.fetchone()
                 if member:
                     tk.messagebox.showinfo('Error', 'You are already in this group')
                 else:
-                    c.execute('SELECT users FROM groups WHERE groupname = ?', (new_group_name,))
+                    c.execute('SELECT users FROM groups WHERE group_name = ?', (new_group_name,))
                     current_users = c.fetchone()[0]
                     updated_users = f'{current_users},{user[1]}' if current_users else user[1]
 
-                    c.execute('UPDATE groups SET users = ? WHERE groupname = ?',
+                    c.execute('UPDATE groups SET users = ? WHERE group_name = ?',
                               (updated_users, new_group_name))
                     conn.commit()
                     tk.messagebox.showinfo('Success', 'You have now joined this group')
@@ -538,10 +538,81 @@ def main_window(user):
         join_button = tk.Button(search_join_window, text='Join', command=join)
         join_button.place(x=100, y=40)
 
-    # 退出登录 cyf
+        # 退出登录
     def exit_log():
         main_win.destroy()
-        window.deiconify()
+
+    # 分享题目
+    def share_question():
+        def send_question():
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT users FROM groups WHERE group_name = ?', (user_group_name_var.get(),))
+            users = c.fetchall()
+            for user in users[0][0].split(','):
+                c.execute('SELECT user_name, question_group_name FROM user_inbox WHERE user_name = ? AND question_group_name = ?',
+                          (user, question_group_name_var.get()))
+                item = c.fetchone()
+                if not item:
+                    c.execute('INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)',
+                          (user, question_group_name_var.get()))
+                    conn.commit()
+                tk.messagebox.showinfo('Success', 'You have shared successfully')
+            conn.close()
+
+        share_window = tk.Toplevel(main_win)
+        share_window.geometry('300x150')
+        share_window.title('Share Question')
+        tk.Label(share_window, text='Select Question Group:').pack()
+        question_group_name_var = tk.StringVar()
+        question_group_menu = ttk.Combobox(share_window, textvariable=question_group_name_var)
+        question_group_menu.pack()
+        tk.Label(share_window, text='Select User Group:').pack()
+        user_group_name_var = tk.StringVar()
+        user_group_menu = ttk.Combobox(share_window, textvariable=user_group_name_var)
+        user_group_menu.pack()
+
+        def load_question_group():
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT group_name FROM question_groups')
+            question_groups = c.fetchall()
+            conn.close()
+            question_group_menu['values'] = [group[0] for group in question_groups]
+
+        def load_user_group():
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT group_name FROM groups')
+            user_groups = c.fetchall()
+            conn.close()
+            if user_groups:
+                user_group_menu['values'] = [group[0] for group in user_groups]
+
+        load_question_group()
+        load_user_group()
+
+        tk.Button(share_window, text='Send', command=send_question).pack()
+
+    # 接收题目
+    def receive_question():
+        receive_window = tk.Toplevel(main_win)
+        receive_window.geometry('300x150')
+        receive_window.title('Receive Question')
+
+        question_group_name_var = tk.StringVar()
+        question_group_menu = ttk.Combobox(receive_window, textvariable=question_group_name_var)
+        question_group_menu.pack()
+
+        def load_receive_question_group():
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT question_group_name FROM user_inbox')
+            question_groups = c.fetchall()
+            conn.close()
+            question_group_menu['values'] = [group[0] for group in question_groups]
+
+        load_receive_question_group()
 
     def review_errors():
         conn = sqlite3.connect(data_base_path)
@@ -580,6 +651,8 @@ def main_window(user):
     # error logs
     tk.Button(main_win, text="Review Errors", command=review_errors).pack()
 
+    tk.Button(main_win, text='Share Question', command=share_question).pack()
+    tk.Button(main_win, text='Receive Question', command=receive_question).pack()
     main_win.mainloop()
 
 
@@ -590,15 +663,15 @@ if __name__ == '__main__':
 
     # create questions table
     c.execute('''
-                CREATE TABLE IF NOT EXISTS questions
-                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  question_text TEXT NOT NULL,
-                  question_type TEXT NOT NULL,
-                  options TEXT,
-                  correct_answer TEXT NOT NULL,
-                  group_id INTEGER,
-                  FOREIGN KEY (group_id) REFERENCES question_groups (id))
-                  ''')
+              CREATE TABLE IF NOT EXISTS questions
+              (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              question_text TEXT NOT NULL,
+              question_type TEXT NOT NULL,
+              options TEXT,
+              correct_answer TEXT NOT NULL,
+              group_id INTEGER,
+              FOREIGN KEY (group_id) REFERENCES question_groups (id))
+              ''')
     # create users table
     c.execute('''
               CREATE TABLE IF NOT EXISTS users
@@ -611,8 +684,8 @@ if __name__ == '__main__':
     c.execute('''
              CREATE TABLE IF NOT EXISTS groups
              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              groupname TEXT NOT NULL,
-              users TEXT NOT NULL)
+             group_name TEXT NOT NULL,
+             users TEXT NOT NULL)
              ''')
 
     # create questions group table
@@ -623,13 +696,19 @@ if __name__ == '__main__':
               ''')
 
     c.execute('''
-                CREATE TABLE IF NOT EXISTS error_logs
-                (
-                user_id TEXT NOT NULL,
-                question_id TEXT NOT NULL,
-                error_count INTEGER DEFAULT 1,
-                PRIMARY KEY (user_id, question_id))
-                                  ''')
+              CREATE TABLE IF NOT EXISTS error_logs
+              (user_id TEXT NOT NULL,
+              question_id TEXT NOT NULL,
+              error_count INTEGER DEFAULT 1,
+              PRIMARY KEY (user_id, question_id))
+              ''')
+    # 收件箱
+    c.execute('''
+              CREATE TABLE IF NOT EXISTS user_inbox
+              (user_name TEXT NOT NULL,
+              question_group_name TEXT NOT NULL,
+              PRIMARY KEY (user_name, question_group_name))
+              ''')
 
     conn.commit()
     conn.close()
