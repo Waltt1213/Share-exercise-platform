@@ -439,6 +439,7 @@ def main_window(user):
 
             questions_window = tk.Toplevel(practice_window)
             questions_window.title('Questions')
+            questions_window.geometry('400x300')
             if not questions:
                 tk.Label(questions_window, text=f"There's no problem here, go take a look elsewhere").pack()
             for question in questions:
@@ -684,26 +685,36 @@ def main_window(user):
             tk.Button(errors_window, text=f'{question_id}: {question_text[:20]} (Errors: {error_count})',
                       command=lambda q=question: show_question((q[0], q[1]))).pack()
 
+    def question_data():
+        question_win = tk.Tk()
+        question_win.title("question bank")
+        question_win.geometry("450x300")
+        # upload question
+        tk.Button(question_win, text='Upload question and edit', command=upload_question).pack()
+        # practice questions
+        tk.Button(question_win, text='Start Practice', command=start_practice).pack()
+        question_win.mainloop()
+
+
     main_win = tk.Tk()
     main_win.title("Shared Exercises Platform")
     main_win.geometry("450x300")
+
     tk.Label(main_win, text=f"welcome to Shared Exercises, {user[1]}!").pack()
 
-    # upload question
-    tk.Button(main_win, text='Upload question and edit', command=upload_question).pack()
+    tk.Button(main_win, text='Question Bank', command=question_data).place(x=50, y=50)
 
-    # practice questions
-    tk.Button(main_win, text='Start Practice', command=start_practice).pack()
     # create search join user group
     tk.Button(main_win, text='Create a User Group', command=create_user_group).pack()
     tk.Button(main_win, text='Search or join a User Group', command=search_join_user_group).pack()
-    # exit log
-    tk.Button(main_win, text='Exit', command=exit_log).pack()
     # error logs
     tk.Button(main_win, text="Review Errors", command=review_errors).pack()
 
     tk.Button(main_win, text='Share Question', command=share_question).pack()
     tk.Button(main_win, text='Receive Question', command=receive_question).pack()
+
+    # exit log
+    tk.Button(main_win, text='Exit', command=exit_log).pack()
     main_win.mainloop()
 
 
