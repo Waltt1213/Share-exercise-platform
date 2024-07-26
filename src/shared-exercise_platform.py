@@ -179,6 +179,14 @@ def modify_password():
     confirm_button = tk.Button(modify_window, text='Confirm', command=modify)
     confirm_button.place(x=150, y=130)
 
+def show_password():
+    if entry_password.cget('show') == '':
+        entry_password.config(show='*')
+        btn_show_password.config(text="Show Password")
+    else:
+        entry_password.config(show='')
+        btn_show_password.config(text="Hide Password")
+
 
 def main_window(user):
     # 上传问题
@@ -760,8 +768,16 @@ if __name__ == '__main__':
     window.title("Welcome!!!")
     window.geometry('450x300')
 
-    tk.Label(window, text="User name").place(x=50, y=150)
-    tk.Label(window, text="Password").place(x=50, y=190)
+    canvas = tk.Canvas(window, height=200, width=500)
+    image_file = tk.PhotoImage(file='../welcome.gif')
+    image = canvas.create_image(0, 0, anchor='nw', image=image_file)
+    canvas.pack(side='top')
+
+    label_username = tk.Label(window, text="User name")
+    label_password = tk.Label(window, text="Password")
+
+    label_username.place(x=50, y=150)
+    label_password.place(x=50, y=190)
 
     # user_name and password entry
     var_usr_name = tk.StringVar()
@@ -778,5 +794,7 @@ if __name__ == '__main__':
     btn_sign_up.place(x=240, y=230)
     btn_sign_up = tk.Button(window, text='modify password', command=modify_password)
     btn_sign_up.place(x=240, y=265)
+    btn_show_password = tk.Button(window, text='Show Password', command=show_password)
+    btn_show_password.place(x=310, y=185)
 
     window.mainloop()
