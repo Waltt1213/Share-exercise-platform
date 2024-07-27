@@ -2,10 +2,14 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sqlite3
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageTk
 from tkinter import simpledialog
 from tkinter.filedialog import askopenfilename
 from configs import data_base_path
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import time
+import threading
 
 
 def register_user():
@@ -17,6 +21,7 @@ def register_user():
 
         conn = sqlite3.connect(data_base_path)
         c = conn.cursor()
+
         c.execute('SELECT * FROM users WHERE username = ?', (new_user_name,))
         user = c.fetchone()
 
@@ -32,22 +37,6 @@ def register_user():
                 conn.commit()
                 register_window.destroy()
         conn.close()
-
-        """使用文件进行注册
-        with open('user_info.pickle', 'rb') as user_file:
-            current_user_info = pickle.load(user_file)
-
-        if new_password != new_password_confirm:
-            tk.messagebox.showinfo('Error', 'Password must be the same!')
-        elif new_user_name in current_user_info:
-            tk.messagebox.showinfo('Error', 'This user name has been registered')
-        else:
-            current_user_info[new_user_name] = new_password
-            with open('user_info.pickle', 'wb') as user_file:
-                pickle.dump(current_user_info, user_file)
-            tk.messagebox.showinfo('Success', 'You have register successfully')
-            register_window.destroy()
-        """
 
     register_window = tk.Toplevel(window)
     register_window.geometry('350x200')
@@ -88,28 +77,6 @@ def log_user():
     else:
         tk.messagebox.showinfo('Error', 'Incorrect username or password!')
 
-    """使用文件进行登录
-    if user_name == '':
-        tk.messagebox.showinfo('Error', 'Please input')
-        return
-        
-    try:
-        with open('user_info.pickle', 'rb') as user_file:
-            user_info = pickle.load(user_file)
-    except FileNotFoundError:
-        with open('user_info.pickle', 'wb') as user_file:
-            user_info = {user_name: password}
-            pickle.dump(user_info, user_file)
-
-    if user_name not in user_info:
-        tk.messagebox.showinfo('Error', 'This user name is non-existent, please try other or create one')
-    else:
-        if password == user_info[user_name]:
-            tk.messagebox.showinfo('Welcome', 'Welcome to our shared-exercise platform')
-        else:
-            tk.messagebox.showinfo('Error', 'The password is wrong, please try again')
-    """
-
 
 def modify_password():
     def modify():
@@ -139,24 +106,6 @@ def modify_password():
 
         conn.close()
 
-        """使用文件修改密码
-        with open('user_info.pickle', 'rb') as user_file:
-            current_user_info = pickle.load(user_file)
-
-        if user_name not in current_user_info:
-            tk.messagebox.showinfo('Error', 'This user name has not been registered')
-        elif new_password != new_password_confirm:
-            tk.messagebox.showinfo('Error', 'Password must be the same!')
-        elif current_user_info[user_name] == new_password:
-            tk.messagebox.showinfo('Error', 'The new password is the same as the old')
-        else:
-            current_user_info[user_name] = new_password
-            with open('user_info.pickle', 'wb') as user_file:
-                pickle.dump(current_user_info, user_file)
-            tk.messagebox.showinfo('Success', 'You have modified successfully')
-            modify_window.destroy()
-        """
-
     modify_window = tk.Toplevel(window)
     modify_window.geometry('350x200')
     modify_window.title('Modify Window')
@@ -178,6 +127,7 @@ def modify_password():
 
     confirm_button = tk.Button(modify_window, text='Confirm', command=modify)
     confirm_button.place(x=150, y=130)
+
 
 def show_password():
     if entry_password.cget('show') == '':
@@ -333,40 +283,79 @@ def main_window(user):
             question_type = answer_type_var.get()
             group_name = group_name_var.get()
             options_text = ''
-            if question_type == "multiple_choice":
-                options = [entry.get() for entry in option_entries]
-                correct_answers = [options[i] for i in range(len(options)) if correct_answers_list[i].get()]
-                if not correct_answers:
-                    messagebox.showerror("Error", "Please select at least one correct answer.")
-                    return
-                options_text = "|".join(options)
-                correct_answers_text = "|".join(correct_answers)
-            else:
-                correct_answers_text = "|".join([entry.get() for entry in fill_blank_entries])
 
-            conn = sqlite3.connect(data_base_path)
-            c = conn.cursor()
-            c.execute('SELECT id FROM question_groups WHERE group_name = ?', (group_name,))
-            group = c.fetchone()
-            if not group:
-                c.execute('INSERT INTO question_groups (group_name) VALUES (?)', (group_name,))
+            def have_keyword(question_text):
+                conn = sqlite3.connect(data_base_path)
+                c = conn.cursor()
+                c.execute('SELECT * FROM keywords')
+                columns = [desc[0] for desc in c.description]
+                records = c.fetchall()
+                for record in records:
+                    record_dict = dict(zip(columns, record))
+                    if record_dict['keyword_text'] in question_text:
+                        conn.close()
+                        return True
+                conn.close()
+                return False
+
+            keyword_flag = have_keyword(question_text)
+
+            def save_problem():
+                global options_text
+                if question_type == "multiple_choice":
+                    options = [entry.get() for entry in option_entries]
+                    correct_answers = [options[i] for i in range(len(options)) if correct_answers_list[i].get()]
+                    if not correct_answers:
+                        messagebox.showerror("Error", "Please select at least one correct answer.")
+                        return
+                    options_text = "|".join(options)
+                    correct_answers_text = "|".join(correct_answers)
+                else:
+                    correct_answers_text = "|".join([entry.get() for entry in fill_blank_entries])
+
+                conn = sqlite3.connect(data_base_path)
+                c = conn.cursor()
+                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (group_name,))
+                group = c.fetchone()
+                if not group:
+                    c.execute('INSERT INTO question_groups (group_name) VALUES (?)', (group_name,))
+                    conn.commit()
+                    group_id = c.lastrowid
+                else:
+                    group_id = group[0]
+                c.execute('''
+                                    INSERT INTO questions (question_text, question_type, options, correct_answer, group_id) 
+                                    VALUES (?, ?, ?, ?, ?)
+                                    ''', (question_text, question_type, options_text, correct_answers_text, group_id))
                 conn.commit()
-                group_id = c.lastrowid
+                c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
+                          (var_usr_name.get(), f'%{group_name}%'))
+                member = c.fetchone()
+                if not member:
+                    c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
+                              (var_usr_name.get(), group_name))
+                conn.commit()
+                conn.close()
+                messagebox.showinfo("Save", "Question and answer saved successfully!")
+                edit_window.destroy()
+
+            if keyword_flag:
+                response = messagebox.askyesno("Confirmation",
+                                               "This problem has sensitive words, are you sure you want to save?")
+                if response:
+                    save_problem()
             else:
-                group_id = group[0]
-            c.execute('''
-                INSERT INTO questions (question_text, question_type, options, correct_answer, group_id) 
-                VALUES (?, ?, ?, ?, ?)
-                ''', (question_text, question_type, options_text, correct_answers_text, group_id))
-            conn.commit()
-            c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
-                      (var_usr_name.get(), group_name))
-            conn.commit()
-            conn.close()
-            messagebox.showinfo("Save", "Question and answer saved successfully!")
-            edit_window.destroy()
+                save_problem()
 
         tk.Button(edit_window, text='Save', command=save_question).pack(side=tk.BOTTOM)
+
+    def log_answer(user_name, question_id, is_correct):
+        conn = sqlite3.connect(data_base_path)
+        c = conn.cursor()
+        c.execute('INSERT INTO user_answers (user_name, question_id, is_correct) VALUES (?, ?, ?)',
+                  (user_name, question_id, is_correct))
+        conn.commit()
+        conn.close()
 
     def show_question(question):
         question_id, question_text = question
@@ -392,9 +381,11 @@ def main_window(user):
                 op = options.split('|')
                 user_answers = [op[j] for j in range(len(option_vars)) if option_vars[j].get()]
                 if sorted(user_answers) == sorted(correct_answers_list):
+                    log_answer(var_usr_name.get(), question_id, 1)
                     messagebox.showinfo("Correct!", "Your answer is correct!")
                 else:
                     log_error(question_id)
+                    log_answer(var_usr_name.get(), question_id, 0)
                     messagebox.showerror("Incorrect!", "Your answer is incorrect.")
 
         else:
@@ -405,9 +396,11 @@ def main_window(user):
             def check_answer():
                 user_answers = [entry.get() for entry in fill_blank_entries]
                 if sorted(user_answers) == sorted(correct_answers_list):
+                    log_answer(var_usr_name.get(), question_id, 1)
                     messagebox.showinfo("Correct!", "Your answer is correct!")
                 else:
                     log_error(question_id)
+                    log_answer(var_usr_name.get(), question_id, 0)
                     messagebox.showerror("Incorrect!", "Your answer is incorrect.")
 
         tk.Button(question_window, text='Submit', command=check_answer).pack()
@@ -436,7 +429,6 @@ def main_window(user):
             c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id,))
             questions = c.fetchall()
             conn.close()
-
             questions_window = tk.Toplevel(practice_window)
             questions_window.title('Questions')
             questions_window.geometry('400x300')
@@ -447,22 +439,66 @@ def main_window(user):
                 tk.Button(questions_window, text=f'{question_id}: {question_text[:20]}',
                           command=lambda q=question: show_question(q)).pack()
 
+        def show_graph():
+            def fetch_accuracy():
+                conn = sqlite3.connect(data_base_path)
+                c = conn.cursor()
+                c.execute('SELECT SUM(is_correct) * 100.0 / COUNT(*) FROM user_answers WHERE user_name = ?',
+                          (var_usr_name.get(),))
+                accuracy = c.fetchone()[0]
+                conn.close()
+                if accuracy is None:
+                    accuracy = 0.0
+                return accuracy
+
+            def update_graph():
+                while True:
+                    accuracy = fetch_accuracy()
+                    accuracy_list.append(accuracy)
+
+                    ax.clear()
+                    ax.plot(range(len(accuracy_list)), accuracy_list, marker='o', linestyle='-')
+                    ax.set_ylim(0, 100)
+                    ax.set_title('Real-Time Accuracy')
+                    ax.set_xlabel('Attempt Number')
+                    ax.set_ylabel('Accuracy (%)')
+                    canvas.draw()
+                    time.sleep(5)  # 每5秒更新一次
+
+            graph_window = tk.Toplevel(main_win)
+            graph_window.title('Real-Time Accuracy Graph')
+            graph_window.geometry("600x400")
+
+            fig, ax = plt.subplots()
+            global canvas
+            canvas = FigureCanvasTkAgg(fig, master=graph_window)
+            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+            # 启动实时更新图表的线程
+            thread = threading.Thread(target=update_graph)
+            thread.daemon = True
+            thread.start()
+
+        accuracy_list = []
         practice_window = tk.Toplevel(main_win)
         practice_window.title('Practice')
         practice_window.geometry("450x300")
         conn = sqlite3.connect(data_base_path)
         c = conn.cursor()
+        c.execute("DELETE FROM user_answers")
+        conn.commit()
         c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
         question_groups = c.fetchall()
 
         if question_groups:
             for question_group in question_groups[0][0].split(','):
-                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group, ))
+                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group,))
                 group_id = c.fetchone()[0]
                 tk.Button(practice_window, text=question_group, command=lambda gid=group_id: show_questions(gid)).pack()
         else:
             tk.Label(practice_window, text='There is no question groups open to you').pack()
         conn.close()
+        tk.Button(practice_window, text='Show Accuracy Graph', command=show_graph).pack()
 
     def create_user_group():
         def create():
@@ -495,6 +531,36 @@ def main_window(user):
         entry_new_group_name.place(x=100, y=10)
 
         confirm_button = tk.Button(create_window, text='Confirm', command=create)
+        confirm_button.place(x=100, y=40)
+
+    def add_keyword():
+        def add():
+            new_keyword = var_new_keyword.get()
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT * FROM keywords WHERE keyword_text = ?', (new_keyword,))
+            keyword = c.fetchone()
+            if keyword:
+                tk.messagebox.showinfo('Error', 'This group has been created')
+            else:
+                c.execute('INSERT INTO keywords (keyword_text) VALUES (?)',
+                          (new_keyword,))
+                tk.messagebox.showinfo('Success', 'You have add \"' + new_keyword + '\" to keywords successfully')
+                conn.commit()
+                create_window.destroy()
+            conn.close()
+
+        create_window = tk.Toplevel(main_win)
+        create_window.geometry('250x100')
+        create_window.title('Add a New Keyword')
+        var_new_keyword = tk.StringVar()
+
+        tk.Label(create_window, text='Keyword Text:').place(x=10, y=10)
+
+        entry_new_keyword = tk.Entry(create_window, textvariable=var_new_keyword)
+        entry_new_keyword.place(x=100, y=10)
+
+        confirm_button = tk.Button(create_window, text='Confirm', command=add)
         confirm_button.place(x=100, y=40)
 
     # 搜索和加入组
@@ -659,7 +725,7 @@ def main_window(user):
         def load_receive_question_group():
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT question_group_name FROM user_inbox')
+            c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
             question_groups = c.fetchall()
             conn.close()
             question_group_menu['values'] = [group[0] for group in question_groups]
@@ -685,7 +751,66 @@ def main_window(user):
             tk.Button(errors_window, text=f'{question_id}: {question_text[:20]} (Errors: {error_count})',
                       command=lambda q=question: show_question((q[0], q[1]))).pack()
 
-    def question_data():
+    # new function 自行匹配搜索问题
+    def search_question():
+        def set_completion_list(combobox, completion_list):
+            combobox['values'] = completion_list
+
+        def autocomplete(event):
+            typed = question_var.get()
+            matched_options = [f"{row[0]}: {row[1]}" for row in question_texts if typed.lower() in row[1].lower()]
+            question_menu['values'] = matched_options
+
+        def do_question_page(question_id):
+            conn = sqlite3.connect(data_base_path)
+            c = conn.cursor()
+            c.execute('SELECT id, question_text FROM questions WHERE id = ?', (question_id,))
+            questions = c.fetchall()
+            conn.close()
+
+            questions_window = tk.Toplevel(search_window)
+            questions_window.title('Questions')
+            question_id = questions[0][0]
+            question_text = questions[0][1]
+            tk.Button(questions_window, text=f'{question_id}: {question_text[:20]}',
+                      command=lambda q=questions[0]: show_question(q)).pack()
+
+        def enter_do_question_page():
+            selected_value = question_menu.get()
+            if selected_value:
+                question_id = selected_value.split(':')[0].strip()
+                do_question_page(question_id)
+
+        search_window = tk.Toplevel(main_win)
+        search_window.title('Search question')
+        search_window.geometry('450x300')
+
+        question_var = tk.StringVar()
+        question_menu = ttk.Combobox(search_window, textvariable=question_var)
+        question_menu.pack()
+
+        conn = sqlite3.connect(data_base_path)
+        c = conn.cursor()
+        c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
+        question_groups = c.fetchone()
+
+        question_texts = []
+        for question_group in question_groups:
+            c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group,))
+            group_id = c.fetchone()
+            if group_id:
+                c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id[0],))
+                rows = c.fetchall()
+                question_texts.extend(rows)
+
+        set_completion_list(question_menu, [f"{row[0]}: {row[1]}" for row in question_texts])
+        question_var.trace("w", lambda *args: autocomplete(None))
+        conn.close()
+
+        button_do_question = ttk.Button(search_window, text="Confirm", command=enter_do_question_page)
+        button_do_question.pack()
+
+    def question_data_win():
         question_win = tk.Tk()
         question_win.title("question bank")
         question_win.geometry("450x300")
@@ -693,8 +818,18 @@ def main_window(user):
         tk.Button(question_win, text='Upload question and edit', command=upload_question).pack()
         # practice questions
         tk.Button(question_win, text='Start Practice', command=start_practice).pack()
+        tk.Button(question_win, text='Add a Keyword', command=add_keyword).pack()
+        tk.Button(question_win, text='Search', command=search_question).pack()
         question_win.mainloop()
 
+    def group_data_win():
+        group_win = tk.Tk()
+        group_win.title("Groups")
+        group_win.geometry("450x300")
+        # create search join user group
+        tk.Button(main_win, text='Create a User Group', command=create_user_group).pack()
+        tk.Button(main_win, text='Search or join a User Group', command=search_join_user_group).pack()
+        group_win.mainloop()
 
     main_win = tk.Tk()
     main_win.title("Shared Exercises Platform")
@@ -702,19 +837,31 @@ def main_window(user):
 
     tk.Label(main_win, text=f"welcome to Shared Exercises, {user[1]}!").pack()
 
-    tk.Button(main_win, text='Question Bank', command=question_data).place(x=50, y=50)
+    tk.Button(main_win, text='Question Bank', command=question_data_win).place(x=30, y=50)
 
-    # create search join user group
-    tk.Button(main_win, text='Create a User Group', command=create_user_group).pack()
-    tk.Button(main_win, text='Search or join a User Group', command=search_join_user_group).pack()
+    tk.Button(main_win, text='Manager groups', command=question_data_win).place(x=30, y=100)
+
     # error logs
-    tk.Button(main_win, text="Review Errors", command=review_errors).pack()
+    tk.Button(main_win, text="Review Errors", command=review_errors).place(x=30, y=150)
 
-    tk.Button(main_win, text='Share Question', command=share_question).pack()
-    tk.Button(main_win, text='Receive Question', command=receive_question).pack()
+
+    tk.Button(main_win, text='Share Question', command=share_question).place(x=30, y=200)
+    # tk.Button(main_win, text='Receive Question', command=receive_question).pack()
+
 
     # exit log
-    tk.Button(main_win, text='Exit', command=exit_log).pack()
+    tk.Button(main_win, text='Exit', command=exit_log).place(x=400, y=250)
+
+    # 加载图片
+    image_path = "../main.jpg"  # 替换为你的图片路径
+    image = Image.open(image_path)
+    photo = ImageTk.PhotoImage(image)
+
+    # 在指定位置创建Label小部件，并插入图片
+    label = tk.Label(main_win, image=photo)
+    label.image = photo  # 保持对图像的引用以防止被垃圾回收
+    label.place(x=180, y=40)  # 设置Label的位置 (x=100, y=100)
+
     main_win.mainloop()
 
 
@@ -725,59 +872,75 @@ if __name__ == '__main__':
 
     # create questions table
     c.execute('''
-              CREATE TABLE IF NOT EXISTS questions
-              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              question_text TEXT NOT NULL,
-              question_type TEXT NOT NULL,
-              options TEXT,
-              correct_answer TEXT NOT NULL,
-              group_id INTEGER,
-              FOREIGN KEY (group_id) REFERENCES question_groups (id))
-              ''')
+                  CREATE TABLE IF NOT EXISTS questions
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  question_text TEXT NOT NULL,
+                  question_type TEXT NOT NULL,
+                  options TEXT,
+                  correct_answer TEXT NOT NULL,
+                  group_id INTEGER,
+                  FOREIGN KEY (group_id) REFERENCES question_groups (id))
+                  ''')
     # create users table
     c.execute('''
-              CREATE TABLE IF NOT EXISTS users
-              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              username TEXT NOT NULL,
-              password TEXT NOT NULL,
-              role TEXT NOT NULL)
-              ''')
+                  CREATE TABLE IF NOT EXISTS users
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT NOT NULL,
+                  password TEXT NOT NULL,
+                  role TEXT NOT NULL)
+                  ''')
     # create groups table
     c.execute('''
-             CREATE TABLE IF NOT EXISTS groups
-             (id INTEGER PRIMARY KEY AUTOINCREMENT,
-             group_name TEXT NOT NULL,
-             users TEXT NOT NULL)
-             ''')
+                 CREATE TABLE IF NOT EXISTS groups
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 group_name TEXT NOT NULL,
+                 users TEXT NOT NULL)
+                 ''')
 
     # create questions group table
     c.execute('''
-              CREATE TABLE IF NOT EXISTS question_groups
-              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              group_name TEXT NOT NULL)
-              ''')
+                  CREATE TABLE IF NOT EXISTS question_groups
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  group_name TEXT NOT NULL)
+                  ''')
 
     c.execute('''
-              CREATE TABLE IF NOT EXISTS error_logs
-              (user_id TEXT NOT NULL,
-              question_id TEXT NOT NULL,
-              error_count INTEGER DEFAULT 1,
-              PRIMARY KEY (user_id, question_id))
-              ''')
+                  CREATE TABLE IF NOT EXISTS error_logs
+                  (user_id TEXT NOT NULL,
+                  question_id TEXT NOT NULL,
+                  error_count INTEGER DEFAULT 1,
+                  PRIMARY KEY (user_id, question_id))
+                  ''')
+
+    # create keywords group table
+    c.execute('''
+                  CREATE TABLE IF NOT EXISTS keywords
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  keyword_text TEXT NOT NULL)
+                  ''')
+
     # 收件箱
     c.execute('''
-              CREATE TABLE IF NOT EXISTS user_inbox
-              (user_name TEXT NOT NULL,
-              question_group_name TEXT NOT NULL,
-              PRIMARY KEY (user_name, question_group_name))
-              ''')
+                  CREATE TABLE IF NOT EXISTS user_inbox
+                  (user_name TEXT NOT NULL,
+                  question_group_name TEXT NOT NULL,
+                  PRIMARY KEY (user_name, question_group_name))
+                  ''')
 
+    c.execute('''
+                  CREATE TABLE IF NOT EXISTS user_answers 
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_name TEXT NOT NULL,
+                  question_id INTEGER NOT NULL,
+                  is_correct INTEGER NOT NULL,
+                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)
+                  ''')
     conn.commit()
     conn.close()
 
     window = tk.Tk()
     window.title("Welcome!!!")
-    window.geometry('450x300')
+    window.geometry('450x320')
 
     canvas = tk.Canvas(window, height=200, width=500)
     image_file = tk.PhotoImage(file='../welcome.gif')
@@ -804,7 +967,7 @@ if __name__ == '__main__':
     btn_sign_up = tk.Button(window, text='register', command=register_user)
     btn_sign_up.place(x=240, y=230)
     btn_sign_up = tk.Button(window, text='modify password', command=modify_password)
-    btn_sign_up.place(x=240, y=265)
+    btn_sign_up.place(x=240, y=275)
     btn_show_password = tk.Button(window, text='Show Password', command=show_password)
     btn_show_password.place(x=310, y=185)
 
