@@ -827,8 +827,8 @@ def main_window(user):
         group_win.title("Groups")
         group_win.geometry("450x300")
         # create search join user group
-        tk.Button(main_win, text='Create a User Group', command=create_user_group).pack()
-        tk.Button(main_win, text='Search or join a User Group', command=search_join_user_group).pack()
+        tk.Button(group_win, text='Create a User Group', command=create_user_group).pack()
+        tk.Button(group_win, text='Search or join a User Group', command=search_join_user_group).pack()
         group_win.mainloop()
 
     main_win = tk.Tk()
@@ -839,15 +839,13 @@ def main_window(user):
 
     tk.Button(main_win, text='Question Bank', command=question_data_win).place(x=30, y=50)
 
-    tk.Button(main_win, text='Manager groups', command=question_data_win).place(x=30, y=100)
+    tk.Button(main_win, text='Manager groups', command=group_data_win).place(x=30, y=100)
 
     # error logs
     tk.Button(main_win, text="Review Errors", command=review_errors).place(x=30, y=150)
 
-
     tk.Button(main_win, text='Share Question', command=share_question).place(x=30, y=200)
     # tk.Button(main_win, text='Receive Question', command=receive_question).pack()
-
 
     # exit log
     tk.Button(main_win, text='Exit', command=exit_log).place(x=400, y=250)
@@ -860,7 +858,7 @@ def main_window(user):
     # 在指定位置创建Label小部件，并插入图片
     label = tk.Label(main_win, image=photo)
     label.image = photo  # 保持对图像的引用以防止被垃圾回收
-    label.place(x=180, y=40)  # 设置Label的位置 (x=100, y=100)
+    label.place(x=180, y=40)
 
     main_win.mainloop()
 
