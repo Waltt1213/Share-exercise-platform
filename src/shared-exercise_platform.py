@@ -12,6 +12,15 @@ import time
 import threading
 
 
+def hide_win(win):
+    win.withdraw()
+
+
+def show_win(win, last_win):
+    last_win.deiconify()
+    win.destroy()
+
+
 def register_user():
     def register():
         new_user_name = var_new_user_name.get()
@@ -337,6 +346,13 @@ def main_window(user):
                 conn.commit()
                 conn.close()
                 messagebox.showinfo("Save", "Question and answer saved successfully!")
+                c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND users LIKE ?',
+                          (var_usr_name.get(), f'%{group_name}%'))
+                member = c.fetchone()
+                if not member:
+                    c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
+                              (var_usr_name.get(), group_name))
+                conn.commit()
                 edit_window.destroy()
 
             if keyword_flag:
@@ -383,6 +399,7 @@ def main_window(user):
                 if sorted(user_answers) == sorted(correct_answers_list):
                     log_answer(var_usr_name.get(), question_id, 1)
                     messagebox.showinfo("Correct!", "Your answer is correct!")
+                    question_window.destroy()
                 else:
                     log_error(question_id)
                     log_answer(var_usr_name.get(), question_id, 0)
@@ -398,6 +415,7 @@ def main_window(user):
                 if sorted(user_answers) == sorted(correct_answers_list):
                     log_answer(var_usr_name.get(), question_id, 1)
                     messagebox.showinfo("Correct!", "Your answer is correct!")
+                    question_window.destroy()
                 else:
                     log_error(question_id)
                     log_answer(var_usr_name.get(), question_id, 0)
@@ -422,7 +440,7 @@ def main_window(user):
         conn.close()
 
     # 做题
-    def start_practice():
+    def start_practice(lastwin):
         def show_questions(group_id):
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
@@ -479,10 +497,12 @@ def main_window(user):
             thread.daemon = True
             thread.start()
 
+        hide_win(lastwin)
         accuracy_list = []
         practice_window = tk.Toplevel(main_win)
         practice_window.title('Practice')
         practice_window.geometry("450x300")
+        tk.Button(practice_window, text='Return', command=lambda x=lastwin, y=practice_window: show_win(y, x)).place(x=380, y=250)
         conn = sqlite3.connect(data_base_path)
         c = conn.cursor()
         c.execute("DELETE FROM user_answers")
@@ -496,9 +516,9 @@ def main_window(user):
                 group_id = c.fetchone()[0]
                 tk.Button(practice_window, text=question_group, command=lambda gid=group_id: show_questions(gid)).pack()
         else:
-            tk.Label(practice_window, text='There is no question groups open to you').pack()
+            tk.Label(practice_window, text='There is no question groups open to you').place(x=200, y=50)
         conn.close()
-        tk.Button(practice_window, text='Show Accuracy Graph', command=show_graph).pack()
+        tk.Button(practice_window, text='Show Accuracy Graph', command=show_graph).place(x=30, y=250)
 
     def create_user_group():
         def create():
@@ -678,9 +698,11 @@ def main_window(user):
             tk.messagebox.showinfo('Success', 'You have shared successfully')
             conn.close()
 
+        hide_win(main_win)
         share_window = tk.Toplevel(main_win)
         share_window.geometry('300x150')
         share_window.title('Share Question')
+        tk.Button(share_window, text='Return', command=lambda x=main_win, y=share_window: show_win(y, x)).place(x=10,y=5)
         tk.Label(share_window, text='Select Question Group:').pack()
         question_group_name_var = tk.StringVar()
         question_group_menu = ttk.Combobox(share_window, textvariable=question_group_name_var)
@@ -733,6 +755,7 @@ def main_window(user):
         load_receive_question_group()
 
     def review_errors():
+        hide_win(main_win)
         conn = sqlite3.connect(data_base_path)
         c = conn.cursor()
         c.execute(
@@ -745,6 +768,7 @@ def main_window(user):
         errors_window = tk.Toplevel(main_win)
         errors_window.title('Review Errors')
         errors_window.geometry('450x300')
+        tk.Button(errors_window, text='Return', command=lambda x=main_win, y=errors_window: show_win(y, x)).place(x=30,y=13)
 
         for question in errors:
             question_id, question_text, error_count = question
@@ -811,24 +835,28 @@ def main_window(user):
         button_do_question.pack()
 
     def question_data_win():
+        hide_win(main_win)
         question_win = tk.Tk()
         question_win.title("question bank")
         question_win.geometry("450x300")
         # upload question
-        tk.Button(question_win, text='Upload question and edit', command=upload_question).pack()
+        tk.Button(question_win, text='Upload question and edit', command=upload_question).place(x=150, y=50)
         # practice questions
-        tk.Button(question_win, text='Start Practice', command=start_practice).pack()
-        tk.Button(question_win, text='Add a Keyword', command=add_keyword).pack()
-        tk.Button(question_win, text='Search', command=search_question).pack()
+        tk.Button(question_win, text='Start Practice', command=lambda x = question_win: start_practice(x)).place(x=150, y=100)
+        tk.Button(question_win, text='Add a Keyword', command=add_keyword).place(x=150, y=150)
+        tk.Button(question_win, text='Search', command=search_question).place(x=150, y=200)
+        tk.Button(question_win, text='Return', command=lambda x=main_win, y=question_win: show_win(y, x)).place(x=30, y=13)
         question_win.mainloop()
 
     def group_data_win():
+        hide_win(main_win)
         group_win = tk.Tk()
         group_win.title("Groups")
         group_win.geometry("450x300")
         # create search join user group
-        tk.Button(group_win, text='Create a User Group', command=create_user_group).pack()
-        tk.Button(group_win, text='Search or join a User Group', command=search_join_user_group).pack()
+        tk.Button(group_win, text='Create a User Group', command=create_user_group).place(x=150, y=75)
+        tk.Button(group_win, text='Search or join a User Group', command=search_join_user_group).place(x=150, y=150)
+        tk.Button(group_win, text='Return', command=lambda x=main_win, y=group_win: show_win(y, x)).place(x=30, y=13)
         group_win.mainloop()
 
     main_win = tk.Tk()
@@ -851,7 +879,7 @@ def main_window(user):
     tk.Button(main_win, text='Exit', command=exit_log).place(x=400, y=250)
 
     # 加载图片
-    image_path = "../main.jpg"  # 替换为你的图片路径
+    image_path = "../main.jpg"
     image = Image.open(image_path)
     photo = ImageTk.PhotoImage(image)
 
