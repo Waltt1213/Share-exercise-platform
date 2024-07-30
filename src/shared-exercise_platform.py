@@ -904,7 +904,7 @@ def main_window(user):
         hide_win(main_win)
         group_win = tk.Tk()
         group_win.title("Groups")
-        group_win.geometry("450x300")
+        group_win.geometry("450x310")
         # create search join user group
         tk.Button(group_win, text='Create a User Group', command=create_user_group).place(x=150, y=75)
         tk.Button(group_win, text='Search or join a User Group', command=search_join_user_group).place(x=150, y=150)
