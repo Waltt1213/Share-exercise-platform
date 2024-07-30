@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time
 import threading
+import pandas as pd
 
 
 def hide_win(win):
@@ -819,13 +820,14 @@ def main_window(user):
         question_groups = c.fetchone()
 
         question_texts = []
-        for question_group in question_groups:
-            c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group,))
-            group_id = c.fetchone()
-            if group_id:
-                c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id[0],))
-                rows = c.fetchall()
-                question_texts.extend(rows)
+        if question_groups:
+            for question_group in question_groups:
+                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group,))
+                group_id = c.fetchone()
+                if group_id:
+                    c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id[0],))
+                    rows = c.fetchall()
+                    question_texts.extend(rows)
 
         set_completion_list(question_menu, [f"{row[0]}: {row[1]}" for row in question_texts])
         question_var.trace("w", lambda *args: autocomplete(None))
@@ -833,6 +835,56 @@ def main_window(user):
 
         button_do_question = ttk.Button(search_window, text="Confirm", command=enter_do_question_page)
         button_do_question.pack()
+
+    def show_user_ability():
+        data = {}
+        data['timestamp'] = []
+        data['question_id'] = []
+        data['is_correct'] = []
+        conn = sqlite3.connect(data_base_path)
+        c = conn.cursor()
+
+        c.execute('SELECT timestamp FROM user_answers WHERE user_name = ?',
+                  (var_usr_name.get(),))
+        timestamp = c.fetchall()
+        if timestamp:
+            data['timestamp'] = [item[0] for item in timestamp]
+
+        c.execute('SELECT question_id FROM user_answers WHERE user_name = ?',
+                  (var_usr_name.get(),))
+        question_id = c.fetchall()
+        if question_id:
+            data['question_id'] = [item[0] for item in question_id]
+
+        c.execute('SELECT is_correct FROM user_answers WHERE user_name = ?',
+                  (var_usr_name.get(),))
+        is_correct = c.fetchall()
+        if is_correct:
+            data['is_correct'] = [item[0] for item in is_correct]
+
+        # 转换为DataFrame
+        df = pd.DataFrame(data)
+        #df['timestamp'] = pd.to_datetime(df['timestamp'])  # 转换时间戳为日期时间格式
+        # 根据时间戳进行排序
+        df = df.sort_values(by='timestamp')
+        # 计算学生能力评估指标（示例：累计正确率）
+        df['cumulative_accuracy'] = df['is_correct'].cumsum() / (df.index + 1) * 100
+        # 绘制图表
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(df['timestamp'], df['cumulative_accuracy'], marker='o', linestyle='-', color='b')
+        ax.set_title('User Ability Over Time')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Accuracy (%)')
+        ax.grid(True)
+        fig.autofmt_xdate()
+
+        # 将Matplotlib图表嵌入到Tkinter窗口中
+        show_window = tk.Tk()
+        show_window.title('User Ability')
+        show_window.geometry('450x320')
+        canvas = FigureCanvasTkAgg(fig, master=show_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack()
 
     def question_data_win():
         hide_win(main_win)
@@ -877,6 +929,8 @@ def main_window(user):
 
     # exit log
     tk.Button(main_win, text='Exit', command=exit_log).place(x=400, y=250)
+    # user ability
+    tk.Button(main_win, text='User Ability', command=show_user_ability).place(x=30, y=250)
 
     # 加载图片
     image_path = "../main.jpg"
