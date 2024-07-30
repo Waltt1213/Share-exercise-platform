@@ -2,8 +2,10 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sqlite3
 import pytesseract
+import fitz
 from PIL import Image, ImageTk
 from tkinter import simpledialog
+from tkinter import filedialog
 from tkinter.filedialog import askopenfilename
 from configs import data_base_path
 import matplotlib.pyplot as plt
@@ -151,11 +153,25 @@ def show_password():
 def main_window(user):
     # 上传问题
     def upload_question():
-        file_path = askopenfilename()
-        if file_path:
-            image = Image.open(file_path)
-            text = pytesseract.image_to_string(image)
+        file_path = filedialog.askopenfilename()
+        if file_path.endswith('.pdf'):
+            text = extract_text_from_pdf(file_path)
+        else:
+            text = extract_text_from_image(file_path)
+
+        if text:
             edit_question(text)
+
+    def extract_text_from_image(image_path):
+        image = Image.open(image_path)
+        return pytesseract.image_to_string(image)
+
+    def extract_text_from_pdf(pdf_path):
+        doc = fitz.open(pdf_path)
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text
 
     # 编辑问题
 
