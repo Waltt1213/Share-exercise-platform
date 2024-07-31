@@ -156,8 +156,10 @@ def main_window(user):
         file_path = filedialog.askopenfilename()
         if file_path.endswith('.pdf'):
             text = extract_text_from_pdf(file_path)
-        else:
+        elif file_path.endswith('.png') or file_path.endswith('jpg'):
             text = extract_text_from_image(file_path)
+        else:
+            text = None
 
         if text:
             edit_question(text)
@@ -290,10 +292,11 @@ def main_window(user):
         def load_groups():
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT question_group_name FROM user_inbox')
+            c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
             groups = c.fetchall()
             conn.close()
-            group_menu['values'] = [group for group in groups[0][0].split(',')]
+            if groups:
+                group_menu['values'] = [group for group in groups[0][0].split(',')]
 
         def add_new_group():
             new_group = tk.simpledialog.askstring("New Group", "Enter new group name:")
@@ -327,7 +330,7 @@ def main_window(user):
             keyword_flag = have_keyword(question_text)
 
             def save_problem():
-                global options_text
+                options_text = ''
                 if question_type == "multiple_choice":
                     options = [entry.get() for entry in option_entries]
                     correct_answers = [options[i] for i in range(len(options)) if correct_answers_list[i].get()]
@@ -354,29 +357,38 @@ def main_window(user):
                                     VALUES (?, ?, ?, ?, ?)
                                     ''', (question_text, question_type, options_text, correct_answers_text, group_id))
                 conn.commit()
-                c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
-                          (var_usr_name.get(), f'%{group_name}%'))
-                member = c.fetchone()
-                if not member:
+                c.execute('SELECT * FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
+                user = c.fetchone()
+
+                if not user:
                     c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
                               (var_usr_name.get(), group_name))
-                conn.commit()
+                    conn.commit()
+                else:
+                    c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
+                              (var_usr_name.get(), f'%{group_name}%'))
+                    member = c.fetchone()
+                    if not member:
+                        c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
+                        current_question_groups = c.fetchone()[0]
+                        updated_question_groups = f'{current_question_groups},{group_name}' \
+                            if current_question_groups else group_name
+                        print(current_question_groups)
+                        c.execute('UPDATE user_inbox SET question_group_name = ? WHERE user_name = ?',
+                                  (updated_question_groups, var_usr_name.get()))
+                        conn.commit()
+
                 conn.close()
+
                 messagebox.showinfo("Save", "Question and answer saved successfully!")
-                c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND users LIKE ?',
-                          (var_usr_name.get(), f'%{group_name}%'))
-                member = c.fetchone()
-                if not member:
-                    c.execute('''INSERT INTO user_inbox (user_name, question_group_name) VALUES (?, ?)''',
-                              (var_usr_name.get(), group_name))
-                conn.commit()
                 edit_window.destroy()
 
             if keyword_flag:
-                response = messagebox.askyesno("Confirmation",
+                """response = messagebox.askyesno("Confirmation",
                                                "This problem has sensitive words, are you sure you want to save?")
                 if response:
-                    save_problem()
+                    save_problem()"""
+                messagebox.showinfo('Warning!', 'This problem has sensitive words,please edit again')
             else:
                 save_problem()
 
@@ -732,10 +744,10 @@ def main_window(user):
         def load_question_group():
             conn = sqlite3.connect(data_base_path)
             c = conn.cursor()
-            c.execute('SELECT group_name FROM question_groups')
+            c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
             question_groups = c.fetchall()
             conn.close()
-            question_group_menu['values'] = [group[0] for group in question_groups]
+            question_group_menu['values'] = [group[0] for group in question_groups[0][0].split(',')]
 
         def load_user_group():
             conn = sqlite3.connect(data_base_path)
@@ -745,6 +757,8 @@ def main_window(user):
             conn.close()
             if user_groups:
                 user_group_menu['values'] = [group[0] for group in user_groups] + ['All Users']
+            else:
+                user_group_menu['values'] = ['All Users']
 
         load_question_group()
         load_user_group()
@@ -880,7 +894,7 @@ def main_window(user):
 
         # 转换为DataFrame
         df = pd.DataFrame(data)
-        #df['timestamp'] = pd.to_datetime(df['timestamp'])  # 转换时间戳为日期时间格式
+        df['timestamp'] = pd.to_datetime(df['timestamp'])  # 转换时间戳为日期时间格式
         # 根据时间戳进行排序
         df = df.sort_values(by='timestamp')
         # 计算学生能力评估指标（示例：累计正确率）
