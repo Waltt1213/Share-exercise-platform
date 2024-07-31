@@ -38,10 +38,10 @@ def register_user():
         user = c.fetchone()
 
         if user:
-            tk.messagebox.showinfo('Error', 'This user name has been registered')
+            tk.messagebox.showerror('Error', 'This user name has been registered')
         else:
             if new_password != new_password_confirm:
-                tk.messagebox.showinfo('Error', 'Password must be the same!')
+                tk.messagebox.showerror('Error', 'Password must be the same!')
             else:
                 c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
                           (new_user_name, new_password, role))
@@ -87,7 +87,7 @@ def log_user():
         window.destroy()
         main_window(user)
     else:
-        tk.messagebox.showinfo('Error', 'Incorrect username or password!')
+        tk.messagebox.showerror('Error', 'Incorrect username or password!')
 
 
 def modify_password():
@@ -105,16 +105,16 @@ def modify_password():
             c.execute('SELECT password FROM users WHERE username = ?', (user_name,))
             old_password = c.fetchone()[0]
             if new_password != new_password_confirm:
-                tk.messagebox.showinfo('Error', 'Password must be the same!')
+                tk.messagebox.showerror('Error', 'Password must be the same!')
             elif new_password == old_password:
-                tk.messagebox.showinfo('Error', 'The new password is the same as the old')
+                tk.messagebox.showerror('Error', 'The new password is the same as the old')
             else:
                 tk.messagebox.showinfo('Success', 'You have modified successfully')
                 c.execute('UPDATE users SET password = ? WHERE username = ?', (new_password, user_name))
                 conn.commit()
                 modify_window.destroy()
         else:
-            tk.messagebox.showinfo('Error', 'This user name has not been registered')
+            tk.messagebox.showerror('Error', 'This user name has not been registered')
 
         conn.close()
 
@@ -373,7 +373,6 @@ def main_window(user):
                         current_question_groups = c.fetchone()[0]
                         updated_question_groups = f'{current_question_groups},{group_name}' \
                             if current_question_groups else group_name
-                        print(current_question_groups)
                         c.execute('UPDATE user_inbox SET question_group_name = ? WHERE user_name = ?',
                                   (updated_question_groups, var_usr_name.get()))
                         conn.commit()
@@ -388,7 +387,7 @@ def main_window(user):
                                                "This problem has sensitive words, are you sure you want to save?")
                 if response:
                     save_problem()"""
-                messagebox.showinfo('Warning!', 'This problem has sensitive words,please edit again')
+                messagebox.showerror('Error!', 'This problem has sensitive words,please edit again')
             else:
                 save_problem()
 
@@ -559,7 +558,7 @@ def main_window(user):
             group = c.fetchone()
 
             if group:
-                tk.messagebox.showinfo('Error', 'This group has been created')
+                tk.messagebox.showerror('Error', 'This group has been created')
             else:
                 c.execute('INSERT INTO groups (group_name, users) VALUES (?, ?)',
                           (new_group_name, user[1]))
@@ -590,7 +589,7 @@ def main_window(user):
             c.execute('SELECT * FROM keywords WHERE keyword_text = ?', (new_keyword,))
             keyword = c.fetchone()
             if keyword:
-                tk.messagebox.showinfo('Error', 'This group has been created')
+                tk.messagebox.showerror('Error', 'This group has been created')
             else:
                 c.execute('INSERT INTO keywords (keyword_text) VALUES (?)',
                           (new_keyword,))
@@ -624,7 +623,7 @@ def main_window(user):
             if group:
                 tk.messagebox.showinfo('Info', 'This group is existent')
             else:
-                tk.messagebox.showinfo('Error', 'This group has not been created')
+                tk.messagebox.showerror('Error', 'This group has not been created')
 
             conn.close()
 
@@ -639,7 +638,7 @@ def main_window(user):
                           (new_group_name, f'%{user[1]}%'))
                 member = c.fetchone()
                 if member:
-                    tk.messagebox.showinfo('Error', 'You are already in this group')
+                    tk.messagebox.showerror('Error', 'You are already in this group')
                 else:
                     c.execute('SELECT users FROM groups WHERE group_name = ?', (new_group_name,))
                     current_users = c.fetchone()[0]
@@ -650,7 +649,7 @@ def main_window(user):
                     conn.commit()
                     tk.messagebox.showinfo('Success', 'You have now joined this group')
             else:
-                tk.messagebox.showinfo('Error', 'This group has not been created')
+                tk.messagebox.showerror('Error', 'This group has not been created')
 
             conn.close()
 
@@ -688,7 +687,7 @@ def main_window(user):
                     question_groups = c.fetchone()
                     if question_groups:
                         c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
-                                  (user[0], question_group_name_var.get()))
+                                  (user[0], f'%{question_group_name_var.get()}%'))
                         question_group = c.fetchone()
                         if not question_group:
                             c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (user[0],))
@@ -710,7 +709,7 @@ def main_window(user):
                     question_groups = c.fetchone()
                     if question_groups:
                         c.execute('SELECT * FROM user_inbox WHERE user_name = ? AND question_group_name LIKE ?',
-                                  (user, question_group_name_var.get()))
+                                  (user, f'%{question_group_name_var.get()}%'))
                         question_group = c.fetchone()
                         if not question_group:
                             c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (user,))
@@ -747,7 +746,8 @@ def main_window(user):
             c.execute('SELECT question_group_name FROM user_inbox WHERE user_name = ?', (var_usr_name.get(),))
             question_groups = c.fetchall()
             conn.close()
-            question_group_menu['values'] = [group[0] for group in question_groups[0][0].split(',')]
+            if question_groups:
+                question_group_menu['values'] = [group for group in question_groups[0][0].split(',')]
 
         def load_user_group():
             conn = sqlite3.connect(data_base_path)
@@ -823,7 +823,7 @@ def main_window(user):
             questions = c.fetchall()
             conn.close()
 
-            questions_window = tk.Toplevel(search_window)
+            questions_window = tk.Toplevel(search_question_window)
             questions_window.title('Questions')
             question_id = questions[0][0]
             question_text = questions[0][1]
@@ -836,12 +836,12 @@ def main_window(user):
                 question_id = selected_value.split(':')[0].strip()
                 do_question_page(question_id)
 
-        search_window = tk.Toplevel(main_win)
-        search_window.title('Search question')
-        search_window.geometry('450x300')
+        search_question_window = tk.Toplevel(main_win)
+        search_question_window.title('Search question')
+        search_question_window.geometry('450x300')
 
         question_var = tk.StringVar()
-        question_menu = ttk.Combobox(search_window, textvariable=question_var)
+        question_menu = ttk.Combobox(search_question_window, textvariable=question_var)
         question_menu.pack()
 
         conn = sqlite3.connect(data_base_path)
@@ -852,18 +852,19 @@ def main_window(user):
         question_texts = []
         if question_groups:
             for question_group in question_groups:
-                c.execute('SELECT id FROM question_groups WHERE group_name = ?', (question_group,))
-                group_id = c.fetchone()
-                if group_id:
-                    c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id[0],))
-                    rows = c.fetchall()
-                    question_texts.extend(rows)
+                for group in question_group.split(','):
+                    c.execute('SELECT id FROM question_groups WHERE group_name = ?', (group,))
+                    group_id = c.fetchone()
+                    if group_id:
+                        c.execute('SELECT id, question_text FROM questions WHERE group_id = ?', (group_id[0],))
+                        rows = c.fetchall()
+                        question_texts.extend(rows)
 
         set_completion_list(question_menu, [f"{row[0]}: {row[1]}" for row in question_texts])
         question_var.trace("w", lambda *args: autocomplete(None))
         conn.close()
 
-        button_do_question = ttk.Button(search_window, text="Confirm", command=enter_do_question_page)
+        button_do_question = ttk.Button(search_question_window, text="Confirm", command=enter_do_question_page)
         button_do_question.pack()
 
     def show_user_ability():
@@ -1080,5 +1081,6 @@ if __name__ == '__main__':
     btn_sign_up.place(x=240, y=275)
     btn_show_password = tk.Button(window, text='Show Password', command=show_password)
     btn_show_password.place(x=310, y=185)
+
 
     window.mainloop()
